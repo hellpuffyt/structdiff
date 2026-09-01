@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: install
+        run: npm ci
+
+      - name: test
+        run: npm test
+
+  quality:
+    name: types, lint and coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: install
+        run: npm ci
+
+      # Both tsconfigs: the CLI/core project, and the web viewer.
+      - name: tsc --noEmit (core+cli, and web)
+        run: npm run typecheck
+
+      - name: eslint
+        run: npm run lint
+
+      # vitest.config.ts fails the run below the thresholds it declares.
+      - name: coverage
+        run: npm run coverage
+
+      # Both build targets have to actually compile.
+      - name: build the CLI and the web viewer
+        run: npm run build && npm run build:web
+
+  dogfood:
+    name: the tool diffs its own bundled example
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: install and build
+        run: npm ci && npm run build
+
+      # The example's ops are asserted exactly (not just "ran without
+      # crashing"): every kind of op the matcher produces appears in it, so
+      # a regression in the matching algorithm changes this output.
+      - name: exact diff output against the bundled example
+        run: |
+          set -euo pipefail
+
+          set +e
+          actual="$(node dist/cli/index.js examples/before.yaml examples/after.yaml --no-color)"
+          diff_exit=$?
+          set -e
+          expected='+ added database.maxConnections = 50
+          ~ changed database.poolSize: 10 -> 20
+          → moved featureFlags[2] -> featureFlags[0]
+          → moved featureFlags[0] -> featureFlags[2]
+          + added featureFlags[3] = "betaSearch"
+          → moved+renamed network.retryLimit -> http.maxRetries
+          → moved network.timeoutSeconds -> http.timeoutSeconds
+          → renamed logging.format -> logging.layout
+          - removed tags.owner (was "payments-team")
+
+          2 added, 1 removed, 1 changed, 3 moved, 1 renamed, 1 moved+renamed, 6 unchanged'
+          # Normalize leading indentation from the YAML block scalar above.
+          expected="$(echo "$expected" | sed 's/^ *//')"
+
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::dogfood output did not match"
+            echo "--- actual ---"
+            echo "$actual"
+            echo "--- expected ---"
+            echo "$expected"
+            exit 1
+          fi
+
+          # --fail-on changed (the default) must exit 1 on this diff...
+          test "$diff_exit" = "1" || { echo "::error::expected exit 1 with default --fail-on, got $diff_exit"; exit 1; }
+
+          # ...but a diff against itself is exit 0 with no differences.
+          set +e
+          node dist/cli/index.js examples/before.yaml examples/before.yaml --no-color > /dev/null
+          same_exit=$?
+          set -e
+          test "$same_exit" = "0" || { echo "::error::expected exit 0 for an identical document, got $same_exit"; exit 1; }
