@@ -1,0 +1,21 @@
+service:
+  name: checkout-api
+  region: us-east-1
+http:
+  timeoutSeconds: 30000
+  maxRetries: 3 retries with exponential backoff
+database:
+  host: db.internal.example.com
+  port: 5432
+  poolSize: 20
+  maxConnections: 50
+logging:
+  level: info
+  layout: json lines format
+featureFlags:
+  - legacyExport
+  - newCheckout
+  - darkMode
+  - betaSearch
+tags:
+  environment: production

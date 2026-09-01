@@ -1,0 +1,339 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f7f7f5;
+  --panel: #ffffff;
+  --border: #e2e2df;
+  --text: #1c1c1a;
+  --text-muted: #6b6b66;
+  --accent: #2563eb;
+
+  --added-bg: #e6f4ea;
+  --added-fg: #1e7a34;
+  --removed-bg: #fbe9e9;
+  --removed-fg: #b3261e;
+  --changed-bg: #fff6da;
+  --changed-fg: #8a6d00;
+  --moved-bg: #e3f2fd;
+  --moved-fg: #0b5fa5;
+  --renamed-bg: #f1e8fb;
+  --renamed-fg: #6a2fb0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16171a;
+    --panel: #1e1f23;
+    --border: #33353a;
+    --text: #e9e9e7;
+    --text-muted: #9a9a96;
+    --accent: #6ea8fe;
+
+    --added-bg: #123420;
+    --added-fg: #7ee2a0;
+    --removed-bg: #3a1616;
+    --removed-fg: #ff9d97;
+    --changed-bg: #3a2f05;
+    --changed-fg: #ffd764;
+    --moved-bg: #0e2c42;
+    --moved-fg: #7fc4ff;
+    --renamed-bg: #2a1c3d;
+    --renamed-fg: #d3aefc;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
+}
+
+.tagline {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  max-width: 46ch;
+  font-size: 0.9rem;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.min-match-control {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  gap: 0.2rem;
+}
+
+.min-match-control input {
+  width: 5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.example-button,
+.file-button {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.example-button:hover,
+.file-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.input-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 720px) {
+  .input-grid,
+  .tree-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.side-input {
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--panel);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.side-input-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.side-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.format-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  padding: 0.1rem 0.4rem;
+}
+
+.side-input-header .file-button {
+  margin-left: auto;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.side-textarea {
+  width: 100%;
+  min-height: 10rem;
+  resize: vertical;
+  border: none;
+  padding: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.empty-state,
+.error-state {
+  border: 1px dashed var(--border);
+  border-radius: 0.6rem;
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.error-state {
+  border-color: var(--removed-fg);
+  color: var(--removed-fg);
+  text-align: left;
+  border-style: solid;
+}
+
+.error-state p {
+  margin: 0.25rem 0;
+}
+
+.stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.stat-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  background: var(--panel);
+}
+
+.stat-chip strong {
+  margin-right: 0.3em;
+}
+
+.tree-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.tree-pane {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--panel);
+  padding: 0.75rem 0;
+  max-height: 60vh;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.tree-line {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+}
+
+.tree-line .gutter {
+  width: 1em;
+  flex: none;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.tree-empty {
+  padding: 0 0.75rem;
+  color: var(--text-muted);
+}
+
+.line-added {
+  background: var(--added-bg);
+  color: var(--added-fg);
+}
+.line-removed {
+  background: var(--removed-bg);
+  color: var(--removed-fg);
+}
+.line-changed {
+  background: var(--changed-bg);
+  color: var(--changed-fg);
+}
+.line-moved {
+  background: var(--moved-bg);
+  color: var(--moved-fg);
+}
+.line-renamed,
+.line-moved-renamed {
+  background: var(--renamed-bg);
+  color: var(--renamed-fg);
+}
+
+.stat-chip.line-added {
+  background: var(--added-bg);
+  color: var(--added-fg);
+  border-color: transparent;
+}
+.stat-chip.line-removed {
+  background: var(--removed-bg);
+  color: var(--removed-fg);
+  border-color: transparent;
+}
+.stat-chip.line-changed {
+  background: var(--changed-bg);
+  color: var(--changed-fg);
+  border-color: transparent;
+}
+.stat-chip.line-moved {
+  background: var(--moved-bg);
+  color: var(--moved-fg);
+  border-color: transparent;
+}
+.stat-chip.line-renamed,
+.stat-chip.line-moved-renamed {
+  background: var(--renamed-bg);
+  color: var(--renamed-fg);
+  border-color: transparent;
+}
+
+.app-footer {
+  margin-top: 2.5rem;
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.app-footer a {
+  color: var(--accent);
+}
