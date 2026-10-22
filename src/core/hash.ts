@@ -23,6 +23,33 @@ function stringify(value: JsonValue): string {
 }
 
 /**
+ * Memoised canonical form, used as the *exact* equality key inside the
+ * differ. Two values are equal iff their canonical strings are equal (the
+ * encoding is injective: keys are sorted and JSON-quoted, strings are
+ * JSON-quoted, numbers/booleans/null are bare). Containers are cached by
+ * identity, so a subtree's string is built once and reused by every
+ * ancestor instead of being re-serialised at each level.
+ */
+export function createCanonicalizer(): (value: JsonValue) => string {
+  const cache = new WeakMap<object, string>();
+  const canon = (value: JsonValue): string => {
+    if (value === null || typeof value !== "object") return stringify(value);
+    const hit = cache.get(value);
+    if (hit !== undefined) return hit;
+    let out: string;
+    if (Array.isArray(value)) {
+      out = `[${value.map(canon).join(",")}]`;
+    } else {
+      const keys = Object.keys(value).sort();
+      out = `{${keys.map((k) => `${JSON.stringify(k)}:${canon(value[k] as JsonValue)}`).join(",")}}`;
+    }
+    cache.set(value, out);
+    return out;
+  };
+  return canon;
+}
+
+/**
  * A small, fast, deterministic non-cryptographic hash (FNV-1a, 32-bit,
  * returned as an 8-hex-char string). This is used only for content
  * fingerprinting to pair up moved/renamed nodes, never for security
@@ -39,7 +66,11 @@ export function fnv1a(input: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-/** Content hash of a JSON value, stable across key order. */
+/**
+ * Content hash of a JSON value, stable across key order. A 32-bit hash
+ * collides easily (and can be forced deliberately), so the differ never
+ * uses it to decide equality — it compares canonical strings instead.
+ */
 export function hashValue(value: JsonValue): string {
   return fnv1a(canonicalStringify(value));
 }

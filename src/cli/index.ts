@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   diffValues,
@@ -125,7 +125,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
         break;
       case "--fail-on": {
         const val = argv[++i];
-        if (!val || !(val in SEVERITY)) {
+        // Own keys only: `in` also accepted "toString"/"constructor", which
+        // compared as NaN and silently disabled the gate.
+        if (!val || !Object.hasOwn(SEVERITY, val)) {
           throw new CliUsageError(`--fail-on requires one of: ${Object.keys(SEVERITY).join(", ")}`);
         }
         failOn = val as DiffOp["type"];
@@ -222,7 +224,20 @@ export function runCli(argv: string[], io: CliIO = defaultIO): number {
     throw err;
   }
 
-  const result = diffValues(oldVal, newVal, { minMatchLength: args.minMatch });
+  let result;
+  try {
+    result = diffValues(oldVal, newVal, { minMatchLength: args.minMatch });
+  } catch (err) {
+    // Exit 1 means "differences found"; a crash must never look like that
+    // (or, worse, like 0). Deep nesting exhausts the call stack.
+    const tooDeep = err instanceof RangeError && /call stack/i.test(err.message);
+    io.stderr(
+      tooDeep
+        ? "Input is too deeply nested to diff (call stack exhausted).\n"
+        : `Internal error while diffing: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    return 2;
+  }
 
   if (args.json) {
     io.stdout(`${JSON.stringify(result, null, 2)}\n`);
@@ -249,8 +264,23 @@ export function runCli(argv: string[], io: CliIO = defaultIO): number {
   return shouldFail ? 1 : 0;
 }
 
+/**
+ * True when this module is the process entry point. npm installs `bin`
+ * entries as symlinks (node_modules/.bin, npx, npm link, global installs),
+ * so both sides are compared after resolving symlinks; comparing the raw
+ * argv[1] made the installed CLI exit 0 without doing anything.
+ */
+export function isEntryPoint(argv1: string | undefined, moduleUrl: string): boolean {
+  if (!argv1) return false;
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+}
+
 /* c8 ignore start */
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isEntryPoint(process.argv[1], import.meta.url)) {
   process.exit(runCli(process.argv.slice(2)));
 }
 /* c8 ignore stop */

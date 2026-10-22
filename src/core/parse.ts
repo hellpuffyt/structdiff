@@ -27,7 +27,13 @@ export function parseDocument(source: string, format: InputFormat): JsonValue {
     if (format === "json") {
       return JSON.parse(source) as JsonValue;
     }
-    const value = parseYaml(source) as JsonValue | undefined;
+    // resolveKnownTags: false keeps YAML 1.1 tags (!!timestamp, !!binary,
+    // !!set, !!omap) as their plain JSON-compatible form. Resolved, they
+    // became Date/Uint8Array/Set/Map objects with no enumerable keys, so two
+    // different timestamps (or sets) compared as equal "{}" and a real
+    // change was reported as unchanged. Unknown tags (e.g. !!js/function)
+    // are never executed either way; logLevel keeps their warnings quiet.
+    const value = parseYaml(source, { resolveKnownTags: false, logLevel: "error" }) as JsonValue | undefined;
     return value === undefined ? null : value;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
