@@ -11,8 +11,8 @@ viewer, client-side only). Runtime dependency: `yaml`.
 
 ## Platforms and prerequisites
 
-Node.js >= 18. Verified on macOS (Apple Silicon): full gate on Node 24.19.0, tests on Node 18, 20,
-22. CI matrix (default branch): ubuntu / windows / macOS x Node 18 / 20 / 22; Windows not run
+Node.js >= 20 (Node 18, end-of-life, was dropped with the vitest 4 upgrade). Verified on macOS (Apple Silicon): full gate on Node 24.19.0, tests on Node 18, 20,
+22. CI matrix: ubuntu / windows / macOS x Node 20 / 22; Windows not run
 locally. The web viewer was built (`npm run build:web`), not exercised in a browser.
 
 ## Clean-clone setup (README "Install")

@@ -7,12 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Node.js 20 or newer is now required** (`engines.node` is `>=20`). Node 18 reached
+  end-of-life on 2025-04-30 and has been dropped from the CI matrix; vitest 4 needs Node 20+.
+
 ### Security
 
 - Web viewer dev server: `vite` 5 -> 6.4 (`@vitejs/plugin-react` 4.7), so `npm run dev:web`
-  no longer runs an esbuild affected by GHSA-67mh-4wv8-2f99. The test runner (vitest 2)
-  still carries dev-only advisories whose fix (vitest 4) needs Node 20+, while CI still
-  tests Node 18.
+  no longer runs an esbuild affected by GHSA-67mh-4wv8-2f99.
+- Test runner: `vitest` / `@vitest/coverage-v8` 2 -> 4.1, clearing the remaining dev-only
+  critical/high advisories (`tinypool`, `@vitest/mocker`, `vite-node`). `npm audit` now
+  reports 0 vulnerabilities.
 
 ### Fixed
 

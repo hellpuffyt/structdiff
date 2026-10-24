@@ -8,7 +8,7 @@ cd structdiff
 npm install
 ```
 
-Node 18+ is required (see `engines` in `package.json`).
+Node 20+ is required (see `engines` in `package.json`).
 
 ## Project layout
 

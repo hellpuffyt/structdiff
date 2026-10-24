@@ -91,6 +91,8 @@ npm ci && npm run build
 npm link        # puts `structdiff` on your PATH (or: node dist/cli/index.js)
 ```
 
+Requires Node.js 20 or newer.
+
 ## CLI usage
 
 Real output, run against the fixtures checked into [`examples/`](examples):
