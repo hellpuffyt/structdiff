@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Web viewer dev server: `vite` 5 -> 6.4 (`@vitejs/plugin-react` 4.7), so `npm run dev:web`
+  no longer runs an esbuild affected by GHSA-67mh-4wv8-2f99. The test runner (vitest 2)
+  still carries dev-only advisories whose fix (vitest 4) needs Node 20+, while CI still
+  tests Node 18.
+
 ### Fixed
 
 - Equality used a 32-bit FNV-1a hash, so two different values with

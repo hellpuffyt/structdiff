@@ -74,7 +74,7 @@ anywhere in the document would get matched as a "move" — a false positive
 that would be worse than no match at all. This means a renamed boolean or
 short-number field is reported as remove+add rather than `renamed`; there
 just isn't enough information in the value alone to know it's the same
-field. Raise `--min-match` down if your documents are small and you want it
+field. Lower `--min-match` if your documents are small and you want it
 more aggressive; raise it up for stricter, higher-confidence pairing.
 
 ## Install
@@ -161,10 +161,11 @@ structdiff before.yaml after.yaml --fail-on changed
 
 `--json` prints the full `DiffResult` (see [`src/core/types.ts`](src/core/types.ts))
 for scripting — every op with its old/new path and value, plus a `stats`
-summary. Real excerpt from the same example:
+summary. Real excerpt from the same example (abridged: the real output prints
+each path array one element per line):
 
 ```console
-$ structdiff examples/before.yaml examples/after.yaml --json | head -20
+$ structdiff examples/before.yaml examples/after.yaml --json
 {
   "ops": [
     {
