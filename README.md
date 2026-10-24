@@ -79,14 +79,16 @@ more aggressive; raise it up for stricter, higher-confidence pairing.
 
 ## Install
 
-```sh
-npm install -g structdiff
-```
+This project is **not published to npm**. The `structdiff` package on the
+npm registry is an unrelated project by another author — do not
+`npm install -g structdiff` or `npx structdiff` expecting this tool.
+Install from a clone instead:
 
-or run it without installing:
-
 ```sh
-npx structdiff old.yaml new.yaml
+git clone https://github.com/hellpuffyt/structdiff
+cd structdiff
+npm ci && npm run build
+npm link        # puts `structdiff` on your PATH (or: node dist/cli/index.js)
 ```
 
 ## CLI usage
@@ -117,8 +119,11 @@ key, different parent) as `moved`. `logging.format` became `logging.layout`
 (same parent, different key) as `renamed`. None of those three show up as
 a remove and an add.
 
-The exit code is 1 by default whenever anything above a plain value
-`changed` exists — see `--fail-on` for CI gating.
+Exit codes: `0` no differences at or above the `--fail-on` level, `1`
+differences found (by default any `changed`, `added` or `removed` value;
+moves and renames alone exit 0), `2` usage, read or parse errors — including
+input too deeply nested to diff — so a failure can never be mistaken for a
+clean diff. See `--fail-on` for CI gating.
 
 ```
 $ structdiff --help
@@ -184,6 +189,23 @@ $ structdiff examples/before.yaml examples/after.yaml --json | head -20
     ...
 ```
 
+### How equality and parsing are decided
+
+Values are compared by an exact canonical form (sorted keys, JSON-quoted
+strings), never by a hash, so two different values can never be reported
+as `unchanged`. YAML is parsed with the `yaml` package without resolving
+YAML 1.1 type tags: `!!timestamp`, `!!binary`, `!!set` and `!!omap` stay in
+their plain JSON-compatible form (string, string, mapping, sequence), unknown
+tags such as `!!js/function` become plain strings, and alias expansion is
+capped by the parser (alias bombs are rejected). Multi-document YAML files
+are rejected with a parse error.
+
+For very large arrays the order-preserving LCS pass runs only on the part
+between the common prefix and suffix, and is skipped above 4 million table
+cells; every element is still matched by exact content, so the op counts
+stay correct, but which of several *duplicate* values is reported as moved
+may differ from a full LCS.
+
 ## Visual diff (web)
 
 ```sh
@@ -226,6 +248,13 @@ npm run build:web       # builds the web viewer to dist-web/
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for more.
+
+## Security
+
+structdiff only parses the two documents you give it; nothing in them is
+executed. See "How equality and parsing are decided" above for the parser
+settings. Please report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -1,4 +1,4 @@
-import { canonicalStringify, hashValue } from "./hash.js";
+import { createCanonicalizer } from "./hash.js";
 import type { DiffOp, DiffOptions, DiffResult, JsonValue, PathSegment } from "./types.js";
 
 const DEFAULT_MIN_MATCH_LENGTH = 5;
@@ -6,7 +6,12 @@ const DEFAULT_MIN_MATCH_LENGTH = 5;
 interface Candidate {
   path: PathSegment[];
   value: JsonValue;
+  /** Exact canonical content key (not a lossy hash: equal keys mean equal values). */
   hash: string;
+  /** Position of this candidate in its (pre-order) candidate list. */
+  index: number;
+  /** One past the last descendant: this candidate's subtree is [index, end). */
+  end: number;
 }
 
 interface WalkState {
@@ -14,7 +19,18 @@ interface WalkState {
   added: Candidate[];
   ops: DiffOp[];
   minMatchLength: number;
+  key: (value: JsonValue) => string;
 }
+
+/**
+ * Above this many LCS table cells (old x new elements left after trimming the
+ * common prefix/suffix) the order-preserving LCS pass is skipped: the table
+ * is O(n*m) in time and memory, and two 20k-element arrays would need 400M
+ * cells. The exact-content pass that follows still pairs every surviving
+ * element, so ops stay correct; only the choice among duplicate values can
+ * differ from a full LCS.
+ */
+const MAX_LCS_CELLS = 4_000_000;
 
 function isContainer(v: JsonValue): v is JsonValue[] | Record<string, JsonValue> {
   return typeof v === "object" && v !== null;
@@ -22,10 +38,6 @@ function isContainer(v: JsonValue): v is JsonValue[] | Record<string, JsonValue>
 
 function isPlainObject(v: JsonValue): v is Record<string, JsonValue> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-function deepEqual(a: JsonValue, b: JsonValue): boolean {
-  return hashValue(a) === hashValue(b);
 }
 
 function pathsEqual(a: PathSegment[], b: PathSegment[]): boolean {
@@ -49,23 +61,30 @@ function isMatchable(value: JsonValue, minMatchLength: number): boolean {
  * lives in was also restructured, so a rename buried two levels down
  * under an otherwise-removed parent is still found.
  */
-function collectCandidates(path: PathSegment[], value: JsonValue, out: Candidate[]): void {
-  out.push({ path, value, hash: hashValue(value) });
+function collectCandidates(
+  state: WalkState,
+  path: PathSegment[],
+  value: JsonValue,
+  out: Candidate[],
+): void {
+  const candidate: Candidate = { path, value, hash: state.key(value), index: out.length, end: 0 };
+  out.push(candidate);
   if (Array.isArray(value)) {
-    value.forEach((item, i) => { collectCandidates([...path, i], item, out); });
+    value.forEach((item, i) => { collectCandidates(state, [...path, i], item, out); });
   } else if (value !== null && typeof value === "object") {
     for (const [key, child] of Object.entries(value)) {
-      collectCandidates([...path, key], child, out);
+      collectCandidates(state, [...path, key], child, out);
     }
   }
+  candidate.end = out.length;
 }
 
 function registerRemoved(state: WalkState, path: PathSegment[], value: JsonValue): void {
-  collectCandidates(path, value, state.removed);
+  collectCandidates(state, path, value, state.removed);
 }
 
 function registerAdded(state: WalkState, path: PathSegment[], value: JsonValue): void {
-  collectCandidates(path, value, state.added);
+  collectCandidates(state, path, value, state.added);
 }
 
 function diffNode(
@@ -79,7 +98,7 @@ function diffNode(
   const bothArrays = Array.isArray(oldVal) && Array.isArray(newVal);
 
   if (bothObjects || bothArrays) {
-    if (hashValue(oldVal) === hashValue(newVal)) {
+    if (state.key(oldVal) === state.key(newVal)) {
       const type: DiffOp["type"] = pathsEqual(oldPath, newPath) ? "unchanged" : "moved";
       state.ops.push({ type, oldPath, newPath, oldValue: oldVal, newValue: newVal });
       return;
@@ -106,7 +125,7 @@ function diffNode(
     return;
   }
 
-  if (deepEqual(oldVal, newVal)) {
+  if (state.key(oldVal) === state.key(newVal)) {
     const type: DiffOp["type"] = pathsEqual(oldPath, newPath) ? "unchanged" : "moved";
     state.ops.push({ type, oldPath, newPath, oldValue: oldVal, newValue: newVal });
   } else {
@@ -141,8 +160,33 @@ function diffObject(
   }
 }
 
-/** Longest common subsequence of two hash arrays; returns matched index pairs in order. */
+/**
+ * Longest common subsequence of two key arrays; returns matched index pairs
+ * in order. The common prefix and suffix are matched directly (the usual
+ * case for an edited array), and only the middle goes through the O(n*m)
+ * table — skipped entirely beyond MAX_LCS_CELLS.
+ */
 function lcsMatch(oldHashes: string[], newHashes: string[]): [number, number][] {
+  let start = 0;
+  while (start < oldHashes.length && start < newHashes.length && oldHashes[start] === newHashes[start]) start++;
+  let oldEnd = oldHashes.length;
+  let newEnd = newHashes.length;
+  while (oldEnd > start && newEnd > start && oldHashes[oldEnd - 1] === newHashes[newEnd - 1]) {
+    oldEnd--;
+    newEnd--;
+  }
+  const pairs: [number, number][] = [];
+  for (let k = 0; k < start; k++) pairs.push([k, k]);
+  const middleOld = oldHashes.slice(start, oldEnd);
+  const middleNew = newHashes.slice(start, newEnd);
+  if (middleOld.length * middleNew.length <= MAX_LCS_CELLS) {
+    for (const [i, j] of lcsTable(middleOld, middleNew)) pairs.push([i + start, j + start]);
+  }
+  for (let k = 0; k < oldHashes.length - oldEnd; k++) pairs.push([oldEnd + k, newEnd + k]);
+  return pairs;
+}
+
+function lcsTable(oldHashes: string[], newHashes: string[]): [number, number][] {
   const n = oldHashes.length;
   const m = newHashes.length;
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
@@ -182,8 +226,8 @@ function diffArray(
   oldParentPath: PathSegment[],
   newParentPath: PathSegment[],
 ): void {
-  const oldHashes = oldArr.map((v) => hashValue(v));
-  const newHashes = newArr.map((v) => hashValue(v));
+  const oldHashes = oldArr.map((v) => state.key(v));
+  const newHashes = newArr.map((v) => state.key(v));
   const matched = lcsMatch(oldHashes, newHashes);
 
   const matchedOld = new Set(matched.map(([i]) => i));
@@ -271,12 +315,6 @@ function parentOf(path: PathSegment[]): PathSegment[] {
   return path.slice(0, -1);
 }
 
-/** True when `path` is `ancestor` or lies underneath it. */
-function isWithin(path: PathSegment[], ancestor: PathSegment[]): boolean {
-  if (path.length < ancestor.length) return false;
-  return ancestor.every((seg, i) => path[i] === seg);
-}
-
 /** A non-empty object or array: has descendant candidates of its own. */
 function hasChildren(value: JsonValue): boolean {
   if (Array.isArray(value)) return value.length > 0;
@@ -318,7 +356,7 @@ function reconcileMoves(state: WalkState): void {
     const oldC = removedList[0]!;
     const newC = addedList[0]!;
     if (pathsEqual(oldC.path, newC.path)) continue; // unreachable: would be "unchanged".
-    matchPairs.push({ oldC, newC, size: canonicalStringify(oldC.value).length });
+    matchPairs.push({ oldC, newC, size: oldC.hash.length });
   }
   matchPairs.sort((a, b) => b.size - a.size);
 
@@ -353,12 +391,9 @@ function reconcileMoves(state: WalkState): void {
     consumedRemoved.add(oldC);
     consumedAdded.add(newC);
 
-    for (const c of state.removed) {
-      if (c !== oldC && isWithin(c.path, oldC.path)) consumedRemoved.add(c);
-    }
-    for (const c of state.added) {
-      if (c !== newC && isWithin(c.path, newC.path)) consumedAdded.add(c);
-    }
+    // Descendants occupy the contiguous pre-order range after the candidate.
+    for (let k = oldC.index + 1; k < oldC.end; k++) consumedRemoved.add(state.removed[k]!);
+    for (let k = newC.index + 1; k < newC.end; k++) consumedAdded.add(state.added[k]!);
   }
 
   emitLeftovers(state.removed, consumedRemoved, "removed", state.ops);
@@ -380,29 +415,27 @@ function emitLeftovers(
   type: "removed" | "added",
   ops: DiffOp[],
 ): void {
-  const absorbed = new Set<Candidate>();
-  const ordered = [...candidates].sort((a, b) => a.path.length - b.path.length);
-
-  for (const c of ordered) {
-    if (consumed.has(c) || absorbed.has(c)) continue;
+  // Pre-order walk: a parent is always visited before its descendants, and
+  // a container that is emitted whole skips straight past its subtree.
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i]!;
+    if (consumed.has(c)) continue;
 
     if (hasChildren(c.value)) {
-      const partiallyMoved = candidates.some(
-        (o) => o !== c && isWithin(o.path, c.path) && consumed.has(o),
-      );
+      let partiallyMoved = false;
+      for (let k = c.index + 1; k < c.end && !partiallyMoved; k++) {
+        partiallyMoved = consumed.has(candidates[k]!);
+      }
       if (!partiallyMoved) {
         ops.push(
           type === "removed"
             ? { type, oldPath: c.path, oldValue: c.value }
             : { type, newPath: c.path, newValue: c.value },
         );
-        for (const o of candidates) {
-          if (o !== c && isWithin(o.path, c.path)) absorbed.add(o);
-        }
-        continue;
+        i = c.end - 1; // its descendants are explained by this op
       }
-      // Part of this container moved elsewhere: fall through without
-      // emitting it, so its remaining descendants get their own ops.
+      // Otherwise part of this container moved elsewhere: do not emit it,
+      // so its remaining descendants get their own ops.
       continue;
     }
 
@@ -446,6 +479,7 @@ export function diffValues(
     added: [],
     ops: [],
     minMatchLength: options.minMatchLength ?? DEFAULT_MIN_MATCH_LENGTH,
+    key: createCanonicalizer(),
   };
 
   diffNode(state, oldVal, newVal, [], []);
