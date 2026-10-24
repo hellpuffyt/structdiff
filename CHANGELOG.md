@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web viewer dev server: `vite` 5 -> 6.4 (`@vitejs/plugin-react` 4.7), so `npm run dev:web`
   no longer runs an esbuild affected by GHSA-67mh-4wv8-2f99.
 - Test runner: `vitest` / `@vitest/coverage-v8` 2 -> 4.1, clearing the remaining dev-only
-  critical/high advisories (`tinypool`, `@vitest/mocker`, `vite-node`). `npm audit` now
+  critical/high advisories (`tinypool`, the nested `vite`, `vite-node`, `@vitest/mocker`, `esbuild`). `npm audit` now
   reports 0 vulnerabilities.
 
 ### Fixed
