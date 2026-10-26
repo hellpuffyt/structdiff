@@ -6,11 +6,48 @@ parent, or was renamed but kept the same value, shows up as `moved` /
 `renamed` instead of a `-`/`+` pair that makes you read the whole value again
 to notice it never actually changed.
 
-<img src="docs/assets/overview.svg" width="100%" alt="Diagram of the structdiff pipeline: two files are parsed by parse.ts, walked together in diff.ts, one-sided keys become candidates keyed by an exact canonical string from hash.ts, reconcileMoves pairs unique matches into moved, renamed or moved-renamed ops, arrays get an LCS, exact-content and positional pass, and the DiffResult goes to the CLI or the web viewer.">
-
 Two ways to use it: a CLI for CI (`structdiff a.yaml b.yaml`, exit code
 driven by `--fail-on`; its only runtime dependency is the `yaml` parser), and
 a side-by-side visual diff that runs entirely in the browser.
+
+## Demo
+
+<img src="docs/screenshots/web-viewer-example-dark.webp" width="100%" alt="structdiff web viewer in dark theme with the bundled example loaded: Before and After YAML editors, a stats bar reading 2 added, 1 removed, 1 changed, 3 moved, 1 renamed, 1 moved+renamed, 6 unchanged, and side-by-side trees with moved, renamed, changed, added and removed lines highlighted">
+
+The web viewer (production build from `npm run build:web`) after clicking
+**Load example**, which loads `examples/before.yaml` and
+`examples/after.yaml`. `network.retryLimit` → `http.maxRetries` is
+highlighted as one moved+renamed line on each side, not a removal and an
+addition. A [light theme capture](docs/screenshots/web-viewer-example-light.webp)
+of the same view is also available.
+
+<img src="docs/screenshots/cli-example-diff.png" width="100%" alt="Terminal capture of the structdiff CLI on the bundled example: nine ops including moved+renamed network.retryLimit -> http.maxRetries, exit 1; --fail-on removed exit 1; a self-diff reporting no semantic differences and exit 0">
+
+Real terminal capture of the CLI on the same files, run from the repository
+root after `npm ci && npm run build`:
+
+```console
+$ node dist/cli/index.js examples/before.yaml examples/after.yaml --no-color; echo "exit $?"
++ added database.maxConnections = 50
+~ changed database.poolSize: 10 -> 20
+→ moved featureFlags[2] -> featureFlags[0]
+→ moved featureFlags[0] -> featureFlags[2]
++ added featureFlags[3] = "betaSearch"
+→ moved+renamed network.retryLimit -> http.maxRetries
+→ moved network.timeoutSeconds -> http.timeoutSeconds
+→ renamed logging.format -> logging.layout
+- removed tags.owner (was "payments-team")
+
+2 added, 1 removed, 1 changed, 3 moved, 1 renamed, 1 moved+renamed, 6 unchanged
+exit 1
+$ node dist/cli/index.js examples/before.yaml examples/after.yaml --fail-on removed > /dev/null; echo "exit $?"
+exit 1
+$ node dist/cli/index.js examples/before.yaml examples/before.yaml --no-color; echo "exit $?"
+No semantic differences.
+
+0 added, 0 removed, 0 changed, 0 moved, 0 renamed, 0 moved+renamed, 1 unchanged
+exit 0
+```
 
 ## Status
 
@@ -45,6 +82,10 @@ pairing is what makes a reviewed Kubernetes manifest, a Terraform
 `.tfvars.json` export, or an app config after a refactor readable.
 
 ## How it works
+
+Diagram of the data flow through `src/core` (a drawing, not a screenshot):
+
+<img src="docs/assets/overview.svg" width="100%" alt="Diagram of the structdiff pipeline: two files are parsed by parse.ts, walked together in diff.ts, one-sided keys become candidates keyed by an exact canonical string from hash.ts, reconcileMoves pairs unique matches into moved, renamed or moved-renamed ops, arrays get an LCS, exact-content and positional pass, and the DiffResult goes to the CLI or the web viewer.">
 
 1. **Parse** both documents (YAML is a JSON superset, so both formats share
    one code path in `src/core/parse.ts`). Files ending in `.json` are read
